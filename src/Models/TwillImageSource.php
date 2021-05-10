@@ -2,8 +2,10 @@
 
 namespace Croustille\Image\Models;
 
-use Exception;
 use A17\Twill\Models\Media;
+use A17\Twill\Models\Behaviors\HasMedias;
+use Illuminate\Support\Collection;
+use Croustille\Image\Exceptions\ImageException;
 use Croustille\Image\Models\Interfaces\ImageSource;
 
 class TwillImageSource implements ImageSource
@@ -22,18 +24,15 @@ class TwillImageSource implements ImageSource
      * @param string $role Twill role defined in Block crops or mediaParams
      * @param string $crop Twill crop defined in Block crops or mediaParams
      * @param Media $media Twill Media instance
+     * @throws ImageException
      */
     public function __construct($model, string $role, string $crop = 'default', Media $media = null)
     {
-        if (!method_exists($model, 'imageAsArray') || !method_exists($model, 'image') || !method_exists($model, 'imageAltText') || !method_exists($model, 'imageCaption')) {
-            throw new Exception("Model doesn't have methods 'image', 'imageAltText', 'imageCaption' and/or 'imageAsArray'", 1);
-        }
-
-        $this->model = $model;
+        $this->setModel($model);
         $this->role = $role;
         $this->crop = $crop;
         $this->media = $media;
-        $this->imageArray = $this->model->imageAsArray($this->role, $this->crop, [], $this->media);
+        $this->setImageArray($model, $role, $crop, $media);
         $profile = config("images.roles.$this->role");
         $this->profile = config("images.profiles.$profile");
     }
@@ -184,5 +183,25 @@ class TwillImageSource implements ImageSource
         }
 
         return $crops;
+    }
+
+    protected function setModel($model)
+    {
+        if (! classHasTrait($model, HasMedias::class)) {
+            throw new ImageException("Model must use HasMedias trait", 1);
+        }
+
+        $this->model = $model;
+    }
+
+    protected function setImageArray($model, $role, $crop, $media)
+    {
+        $imageArray = $model->imageAsArray($role, $crop, [], $media);
+
+        if (empty($imageArray)) {
+            throw new ImageException("No media was found for role '{$role}' and crop '{$crop}'", 1);
+        }
+
+        $this->imageArray = $imageArray;
     }
 }
